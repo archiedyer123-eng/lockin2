@@ -150,10 +150,26 @@ const firebaseConfig = {
   measurementId: "G-7B9W9HW30Q"
 };
 
+// Initialise Firebase (compat)
 if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
 }
 const db = firebase.firestore();
+
+// ---------- FIRESTORE TEST ON LOAD ----------
+async function testFirestore() {
+    try {
+        const ref = await db.collection("debug").add({
+            at: new Date().toISOString(),
+            from: "login.html"
+        });
+        console.log("[TEST] Firestore write OK, id:", ref.id);
+        alert("Firestore test OK – check 'debug' collection in console.");
+    } catch (err) {
+        console.error("[TEST] Firestore error:", err);
+        alert("Firestore error: " + err.message);
+    }
+}
 
 // Background images array
 const backgrounds = [
@@ -162,10 +178,8 @@ const backgrounds = [
     'https://i.pinimg.com/736x/6b/79/1f/6b791f706bfc6010b1f285ffe7867a50.jpg'
 ];
 
-// Load global background preference (shared across all pages)
 let currentBgIndex = parseInt(localStorage.getItem('globalBackgroundIndex')) || 0;
 
-// Change background function with global sync
 function changeBackground(index) {
     currentBgIndex = index;
     document.body.style.backgroundImage = `url('${backgrounds[index]}')`;
@@ -175,7 +189,6 @@ function changeBackground(index) {
     });
 }
 
-// Initialize background on page load
 function initializeBackground() {
     changeBackground(currentBgIndex);
 }
@@ -289,9 +302,10 @@ async function login() {
 window.addEventListener('load', function() {
     document.getElementById('username').focus();
     initializeBackground();
+    testFirestore(); // 🔥 Run test write when page loads
 });
 
-// Login form: Enter in username → focus password
+// Enter key helpers
 document.getElementById('username').addEventListener('keypress', function(event) {
     if (event.key === 'Enter') {
         event.preventDefault();
@@ -299,7 +313,6 @@ document.getElementById('username').addEventListener('keypress', function(event)
     }
 });
 
-// Login form: Enter in password → attempt login
 document.getElementById('password').addEventListener('keypress', function(event) {
     if (event.key === 'Enter') {
         event.preventDefault();
@@ -307,7 +320,6 @@ document.getElementById('password').addEventListener('keypress', function(event)
     }
 });
 
-// Signup form: Enter in username → focus password
 document.getElementById('new-username').addEventListener('keypress', function(event) {
     if (event.key === 'Enter') {
         event.preventDefault();
@@ -315,7 +327,6 @@ document.getElementById('new-username').addEventListener('keypress', function(ev
     }
 });
 
-// Signup form: Enter in password → attempt signup
 document.getElementById('new-password').addEventListener('keypress', function(event) {
     if (event.key === 'Enter') {
         event.preventDefault();
