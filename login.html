@@ -8,7 +8,6 @@
     body { 
         font-family: 'Aptos Mono', monospace; 
         background: hotpink;
-
         background-size: 111%;
         display: flex; 
         justify-content: center; 
@@ -135,7 +134,27 @@
     <button class="bg-button" onclick="changeBackground(2)">Winter</button>
 </div>
 
+<!-- Firebase compat SDK -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+
 <script>
+// --- Firebase config (your project) ---
+const firebaseConfig = {
+  apiKey: "AIzaSyA7ni6-_f9RdfkNzgxLOnjSs_4mqx6UF0w",
+  authDomain: "thegreatlockin-52959.firebaseapp.com",
+  projectId: "thegreatlockin-52959",
+  storageBucket: "thegreatlockin-52959.firebasestorage.app",
+  messagingSenderId: "182993286746",
+  appId: "1:182993286746:web:481aa971d71a25c26f0a63",
+  measurementId: "G-7B9W9HW30Q"
+};
+
+if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+}
+const db = firebase.firestore();
+
 // Background images array
 const backgrounds = [
     'https://i.ibb.co/4ZGv8Bkt/Screenshot-2025-08-14-192943.png',
@@ -150,11 +169,7 @@ let currentBgIndex = parseInt(localStorage.getItem('globalBackgroundIndex')) || 
 function changeBackground(index) {
     currentBgIndex = index;
     document.body.style.backgroundImage = `url('${backgrounds[index]}')`;
-    
-    // Save to global preference (shared across pages)
     localStorage.setItem('globalBackgroundIndex', index);
-    
-    // Update active button
     document.querySelectorAll('.bg-button').forEach((btn, i) => {
         btn.classList.toggle('active', i === index);
     });
@@ -172,7 +187,7 @@ function showSignup() {
     document.getElementById('username').style.display = 'none';
     document.getElementById('password').style.display = 'none';
     document.querySelector('button[onclick="login()"]').style.display = 'none';
-    document.querySelector('p').style.display = 'none';
+    document.querySelector('.login-box > p').style.display = 'none';
 }
 
 function showLogin() { 
@@ -181,54 +196,99 @@ function showLogin() {
     document.getElementById('username').style.display = 'block';
     document.getElementById('password').style.display = 'block';
     document.querySelector('button[onclick="login()"]').style.display = 'block';
-    document.querySelector('p').style.display = 'block';
+    document.querySelector('.login-box > p').style.display = 'block';
 }
 
-// Hashing function using SHA-256
-async function hashPassword(password) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(password);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+// Simple hash (same for signup + login)
+function hashPassword(password) {
+    let hash = 0;
+    for (let i = 0; i < password.length; i++) {
+        hash = (hash << 5) - hash + password.charCodeAt(i);
+        hash |= 0;
+    }
+    return hash.toString();
 }
 
-// Signup
+/* ------------------ SIGNUP (Firestore) ---------------------- */
 async function signup() {
-    const username = document.getElementById('new-username').value.trim();
-    const password = document.getElementById('new-password').value;
-    if (!username || !password) { alert("Fill both fields"); return; }
+    let user = document.getElementById('new-username').value.trim().toLowerCase();
+    let pass = document.getElementById('new-password').value;
 
-    let users = JSON.parse(localStorage.getItem('users')) || {};
-    if (users[username]) { alert("Username exists"); return; }
+    if (!user || !pass) {
+        alert("Fill both fields");
+        return;
+    }
 
-    const hashed = await hashPassword(password);
-    users[username] = hashed;
-    localStorage.setItem('users', JSON.stringify(users));
-    alert("Account created! Please login.");
-    showLogin();
+    try {
+        console.log("[SIGNUP] for:", user);
+        const userRef = db.collection("users").doc(user);
+        const docSnap = await userRef.get();
+
+        if (docSnap.exists) {
+            alert("Username already exists: " + user);
+            return;
+        }
+
+        const hashed = hashPassword(pass);
+        console.log("[SIGNUP] hashed:", hashed);
+
+        await userRef.set({
+            password: hashed,
+            appState: {}
+        });
+
+        alert("Account created for: " + user + ". Please login.");
+        showLogin();
+    } catch (err) {
+        console.error("[SIGNUP] Error:", err);
+        alert("Signup error: " + err.message);
+    }
 }
 
-// Login
+/* ------------------ LOGIN (Firestore) ---------------------- */
 async function login() {
-    const username = document.getElementById('username').value.trim();
-    const password = document.getElementById('password').value;
+    let user = document.getElementById('username').value.trim().toLowerCase();
+    let pass = document.getElementById('password').value;
 
-    let users = JSON.parse(localStorage.getItem('users')) || {};
-    const hashed = await hashPassword(password);
+    if (!user || !pass) {
+        alert("Fill both fields");
+        return;
+    }
 
-    if(users[username] && users[username] === hashed) {
-        localStorage.setItem('currentUser', username);
-        window.location.href = "index.html"; // redirect
-    } else {
-        alert("Invalid username or password");
+    try {
+        console.log("[LOGIN] for:", user);
+        const userRef = db.collection("users").doc(user);
+        const docSnap = await userRef.get();
+
+        if (!docSnap.exists) {
+            alert("User not found in Firestore: " + user);
+            return;
+        }
+
+        const data = docSnap.data();
+        const storedPassword = data.password;
+        const hashed = hashPassword(pass);
+
+        console.log("[LOGIN] stored:", storedPassword);
+        console.log("[LOGIN] input :", hashed);
+
+        if (storedPassword !== hashed) {
+            alert("Password incorrect for user: " + user);
+            return;
+        }
+
+        localStorage.setItem('currentUser', user);
+        window.location.href = "index.html";
+    } catch (err) {
+        console.error("[LOGIN] Error:", err);
+        alert("Login error: " + err.message);
     }
 }
 
 // Auto-focus login username on page load
 window.addEventListener('load', function() {
     document.getElementById('username').focus();
-    initializeBackground(); // Initialize background
+    initializeBackground();
 });
 
 // Login form: Enter in username → focus password
