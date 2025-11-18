@@ -508,10 +508,9 @@ let customTasks = JSON.parse(localStorage.getItem(currentUser + '_customTasks'))
 let currentDate = new Date().toISOString().split('T')[0];
 let dateProgress = JSON.parse(localStorage.getItem(currentUser + '_dateProgress')) || {};
 
-// --- Cloud sync state ---
+// --- Cloud sync state variables (MUST be above any functions that use them) ---
 let isApplyingRemoteUpdate = false;
 let cloudSaveTimeout = null;
-
 
 function getCurrentDateKey() {
     const datePicker = document.getElementById('datePicker');
