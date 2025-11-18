@@ -351,10 +351,9 @@ const db = firebase.firestore();
 
 <script>
 // --- Main App Logic ---
-const currentUser = localStorage.getItem('currentUser');
-if (!currentUser) {
-    window.location.href = 'login.html';
-}
+// TEMP: hard-code a user id so all devices use the same Firestore doc
+const currentUser = 'demoUser';
+// If you want to keep login later, we can wire this back up properly.
 
 // Background images array
 const backgrounds = [
@@ -943,8 +942,9 @@ let isApplyingRemoteUpdate = false;
 let cloudSaveTimeout = null;
 
 function getCurrentUserId() {
-    return localStorage.getItem('currentUser');
+    return currentUser;  // uses 'demoUser'
 }
+
 
 function scheduleCloudSave() {
     // Don't sync while we're applying a remote update, or we'll create a loop
