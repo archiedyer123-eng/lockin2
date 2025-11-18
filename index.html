@@ -946,22 +946,14 @@ if (document.readyState === 'loading') {
 // ---- CLOUD SYNC HELPERS ----
 
 // state: customTasks, dateProgress, currentBgIndex are defined earlier
-// ---- CLOUD SYNC HELPERS ----
-
-// state: customTasks, dateProgress, currentBgIndex are defined earlier
-
 function getCurrentUserId() {
-    return localStorage.getItem('currentUser');
+    return currentUser;  // uses 'demoUser'
 }
 
-function scheduleCloudSave() {
-    console.log('scheduleCloudSave called, isApplyingRemoteUpdate =', isApplyingRemoteUpdate);
 
+function scheduleCloudSave() {
     // Don't sync while we're applying a remote update, or we'll create a loop
-    if (isApplyingRemoteUpdate) {
-        console.log('scheduleCloudSave: skipping because applying remote update');
-        return;
-    }
+    if (isApplyingRemoteUpdate) return;
 
     clearTimeout(cloudSaveTimeout);
     cloudSaveTimeout = setTimeout(syncToCloud, 1000);
@@ -970,7 +962,7 @@ function scheduleCloudSave() {
 async function syncToCloud() {
     const uid = getCurrentUserId();
     if (!uid) {
-        console.warn('syncToCloud: no currentUser, aborting');
+        console.warn('No currentUser, not syncing to cloud');
         return;
     }
 
@@ -979,8 +971,7 @@ async function syncToCloud() {
         dateProgress: dateProgress,
         location: localStorage.getItem(uid + '_location') || '',
         lastVisitDate: localStorage.getItem(uid + '_lastVisitDate') || '',
-        globalBackgroundIndex: parseInt(localStorage.getItem('globalBackgroundIndex')) || 0,
-        theme: localStorage.getItem(uid + '_theme') || 'light' // it's fine if you don't use theme yet
+        globalBackgroundIndex: parseInt(localStorage.getItem('globalBackgroundIndex')) || 0
     };
 
     console.log('🔼 syncToCloud appState for', uid, appState);
@@ -999,7 +990,7 @@ async function syncToCloud() {
 function startRealtimeSync() {
     const uid = getCurrentUserId();
     if (!uid) {
-        console.warn('startRealtimeSync: no currentUser, aborting');
+        console.warn('No currentUser, realtime sync not started');
         return;
     }
 
@@ -1007,95 +998,51 @@ function startRealtimeSync() {
 
     db.collection('users').doc(uid)
         .onSnapshot((docSnap) => {
-            console.log('onSnapshot fired');
-
             if (!docSnap.exists) {
                 console.log('No cloud document yet for this user');
                 return;
             }
 
             const data = docSnap.data().appState;
-            if (!data) {
-                console.log('Snapshot has no appState');
-                return;
-            }
+            if (!data) return;
 
             console.log('📡 Realtime update from cloud:', data);
 
             // We are now applying a remote update – don't trigger syncToCloud from it
             isApplyingRemoteUpdate = true;
 
-            try {
-                // --- Pull data into memory + localStorage ---
-                if (data.customTasks) {
-                    customTasks = data.customTasks;
-                    localStorage.setItem(uid + '_customTasks', JSON.stringify(customTasks));
-                } else {
-                    customTasks = [];
-                    localStorage.removeItem(uid + '_customTasks');
-                }
-
-                if (data.dateProgress) {
-                    dateProgress = data.dateProgress;
-                    localStorage.setItem(uid + '_dateProgress', JSON.stringify(dateProgress));
-                } else {
-                    dateProgress = {};
-                    localStorage.removeItem(uid + '_dateProgress');
-                }
-
-                if (data.location !== undefined) {
-                    localStorage.setItem(uid + '_location', data.location);
-                }
-
-                if (data.lastVisitDate !== undefined) {
-                    localStorage.setItem(uid + '_lastVisitDate', data.lastVisitDate);
-                }
-
-                if (typeof data.globalBackgroundIndex === 'number') {
-                    localStorage.setItem('globalBackgroundIndex', data.globalBackgroundIndex);
-                    currentBgIndex = data.globalBackgroundIndex;
-                }
-
-                if (data.theme) {
-                    localStorage.setItem(uid + '_theme', data.theme);
-                }
-
-                // Rebuild the page from this local state
-                rebuildUIFromLocal();
-
-            } catch (err) {
-                console.error('❌ Error while applying remote update', err);
-            } finally {
-                // ALWAYS reset this flag so phone can save again
-                isApplyingRemoteUpdate = false;
-                console.log('Remote update finished, isApplyingRemoteUpdate =', isApplyingRemoteUpdate);
+            // --- Pull data into memory + localStorage ---
+            if (data.customTasks) {
+                customTasks = data.customTasks;
+                localStorage.setItem(uid + '_customTasks', JSON.stringify(customTasks));
+            } else {
+                customTasks = [];
+                localStorage.removeItem(uid + '_customTasks');
             }
-        }, (err) => {
-            console.error('❌ Realtime listener error:', err);
-        });
-}
 
-function rebuildUIFromLocal() {
-    const uid = getCurrentUserId();
+            if (data.dateProgress) {
+                dateProgress = data.dateProgress;
+                localStorage.setItem(uid + '_dateProgress', JSON.stringify(dateProgress));
+            } else {
+                dateProgress = {};
+                localStorage.removeItem(uid + '_dateProgress');
+            }
 
-    // Rebuild custom tasks
-    const ul = document.getElementById('custom-checklist');
-    if (ul) {
-        ul.innerHTML = '';
-        customTasks.forEach((task) => addTaskToDOM(task, true, task.id));
-    }
+            if (data.location !== undefined) {
+                localStorage.setItem(uid + '_location', data.location);
+            }
 
-    // Reapply background, weather location, and checkbox states
-    initializeBackground();
-    initializeLocationInput();
-    loadCheckboxStates();
+            if (data.lastVisitDate !== undefined) {
+                localStorage.setItem(uid + '_lastVisitDate', data.lastVisitDate);
+            }
 
-    const theme = localStorage.getItem(uid + '_theme') || 'light';
-    document.body.setAttribute('data-theme', theme);
+            if (typeof data.globalBackgroundIndex === 'number') {
+                localStorage.setItem('globalBackgroundIndex', data.globalBackgroundIndex);
+                currentBgIndex = data.globalBackgroundIndex;
+            }
 
-    console.log('🔁 UI rebuilt from local state for user', uid);
-}
-
+            // Rebuild the page from this local state
+            rebuildUIFromLocal();
 
             // Done applying remote changes – allow local → cloud again
             isApplyingRemoteUpdate = false;
