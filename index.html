@@ -936,10 +936,18 @@ if (document.readyState === 'loading') {
     startRealtimeSync();
 }
 
+// ---- CLOUD SYNC HELPERS ----
+
+// state: customTasks, dateProgress, currentBgIndex are defined earlier
 let isApplyingRemoteUpdate = false;
 let cloudSaveTimeout = null;
 
+function getCurrentUserId() {
+    return localStorage.getItem('currentUser');
+}
+
 function scheduleCloudSave() {
+    // Don't sync while we're applying a remote update, or we'll create a loop
     if (isApplyingRemoteUpdate) return;
 
     clearTimeout(cloudSaveTimeout);
@@ -947,130 +955,113 @@ function scheduleCloudSave() {
 }
 
 async function syncToCloud() {
-    const currentUser = localStorage.getItem('currentUser');
-    if (!currentUser) return;
+    const uid = getCurrentUserId();
+    if (!uid) {
+        console.warn('No currentUser, not syncing to cloud');
+        return;
+    }
 
     const appState = {
         customTasks: customTasks,
         dateProgress: dateProgress,
-        location: localStorage.getItem(currentUser + '_location') || '',
-        lastVisitDate: localStorage.getItem(currentUser + '_lastVisitDate') || '',
+        location: localStorage.getItem(uid + '_location') || '',
+        lastVisitDate: localStorage.getItem(uid + '_lastVisitDate') || '',
         globalBackgroundIndex: parseInt(localStorage.getItem('globalBackgroundIndex')) || 0
     };
 
-    console.log('🔼 syncToCloud appState:', appState);
+    console.log('🔼 syncToCloud appState for', uid, appState);
 
     try {
-        await db.collection('users').doc(currentUser).set(
+        await db.collection('users').doc(uid).set(
             { appState: appState },
             { merge: true }
         );
-        console.log('✅ Synced to cloud');
+        console.log('✅ Synced to cloud for user', uid);
     } catch (err) {
         console.error('❌ Error syncing to cloud', err);
     }
 }
 
-async function syncFromCloud() {
-    const currentUser = localStorage.getItem('currentUser');
-    if (!currentUser) return;
-
-    try {
-        const docSnap = await db.collection('users').doc(currentUser).get();
-        if (!docSnap.exists) return;
-
-        const data = docSnap.data().appState;
-        if (!data) return;
-
-        if (data.customTasks) {
-            customTasks = data.customTasks;
-            localStorage.setItem(currentUser + '_customTasks', JSON.stringify(customTasks));
-        }
-
-        if (data.dateProgress) {
-            dateProgress = data.dateProgress;
-            localStorage.setItem(currentUser + '_dateProgress', JSON.stringify(dateProgress));
-        }
-
-        if (data.location) {
-            localStorage.setItem(currentUser + '_location', data.location);
-        }
-
-        if (data.lastVisitDate) {
-            localStorage.setItem(currentUser + '_lastVisitDate', data.lastVisitDate);
-        }
-
-        if (typeof data.globalBackgroundIndex !== 'undefined') {
-            localStorage.setItem('globalBackgroundIndex', data.globalBackgroundIndex);
-            currentBgIndex = data.globalBackgroundIndex;
-        }
-
-        rebuildUIFromLocal();
-
-        console.log('✅ Synced from cloud');
-    } catch (err) {
-        console.error('❌ Error syncing from cloud', err);
-    }
-}
 function startRealtimeSync() {
-    const currentUser = localStorage.getItem('currentUser');
-    if (!currentUser) return;
+    const uid = getCurrentUserId();
+    if (!uid) {
+        console.warn('No currentUser, realtime sync not started');
+        return;
+    }
 
-    db.collection('users').doc(currentUser)
+    console.log('📡 Starting realtime listener for user', uid);
+
+    db.collection('users').doc(uid)
         .onSnapshot((docSnap) => {
-            if (!docSnap.exists) return;
+            if (!docSnap.exists) {
+                console.log('No cloud document yet for this user');
+                return;
+            }
 
             const data = docSnap.data().appState;
             if (!data) return;
 
-            console.log('📡 Real-time update from cloud:', data);
+            console.log('📡 Realtime update from cloud:', data);
 
-            // Tell the app we are applying a remote update
+            // We are now applying a remote update – don't trigger syncToCloud from it
             isApplyingRemoteUpdate = true;
 
-            // --- same logic as syncFromCloud had ---
+            // --- Pull data into memory + localStorage ---
             if (data.customTasks) {
                 customTasks = data.customTasks;
-                localStorage.setItem(currentUser + '_customTasks', JSON.stringify(customTasks));
+                localStorage.setItem(uid + '_customTasks', JSON.stringify(customTasks));
+            } else {
+                customTasks = [];
+                localStorage.removeItem(uid + '_customTasks');
             }
 
             if (data.dateProgress) {
                 dateProgress = data.dateProgress;
-                localStorage.setItem(currentUser + '_dateProgress', JSON.stringify(dateProgress));
+                localStorage.setItem(uid + '_dateProgress', JSON.stringify(dateProgress));
+            } else {
+                dateProgress = {};
+                localStorage.removeItem(uid + '_dateProgress');
             }
 
-            if (data.location) {
-                localStorage.setItem(currentUser + '_location', data.location);
+            if (data.location !== undefined) {
+                localStorage.setItem(uid + '_location', data.location);
             }
 
-            if (data.lastVisitDate) {
-                localStorage.setItem(currentUser + '_lastVisitDate', data.lastVisitDate);
+            if (data.lastVisitDate !== undefined) {
+                localStorage.setItem(uid + '_lastVisitDate', data.lastVisitDate);
             }
 
-            if (typeof data.globalBackgroundIndex !== 'undefined') {
+            if (typeof data.globalBackgroundIndex === 'number') {
                 localStorage.setItem('globalBackgroundIndex', data.globalBackgroundIndex);
                 currentBgIndex = data.globalBackgroundIndex;
             }
 
+            // Rebuild the page from this local state
             rebuildUIFromLocal();
 
-            // Done applying remote changes — re-enable saving
+            // Done applying remote changes – allow local → cloud again
             isApplyingRemoteUpdate = false;
         }, (err) => {
-            console.error('❌ Real-time listener error:', err);
+            console.error('❌ Realtime listener error:', err);
         });
 }
 
 function rebuildUIFromLocal() {
+    const uid = getCurrentUserId();
+
+    // Rebuild custom tasks
     const ul = document.getElementById('custom-checklist');
     if (ul) {
         ul.innerHTML = '';
         customTasks.forEach((task) => addTaskToDOM(task, true, task.id));
     }
 
+    // Reapply background, weather location, and checkbox states
     initializeBackground();
     initializeLocationInput();
     loadCheckboxStates();
+
+    console.log('🔁 UI rebuilt from local state for user', uid);
 }
 </script>
 </body>
