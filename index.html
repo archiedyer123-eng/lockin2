@@ -741,17 +741,13 @@ function addTaskToDOM(task, isExisting = false, taskId) {
         saveCheckboxState(taskId, checkbox.checked, true);
     });
     const deleteBtn = li.querySelector('.delete-btn');
-deleteBtn.addEventListener('click', () => {
-    const index = customTasks.findIndex(t => t.id === taskId);
-    if(index > -1) customTasks.splice(index, 1);
-    localStorage.setItem(currentUser + '_customTasks', JSON.stringify(customTasks));
-    li.remove();
-    setTimeout(loadCheckboxStates, 10);
-
-    // 🔹 sync deletion
-    scheduleCloudSave();
-});
-
+    deleteBtn.addEventListener('click', () => {
+        const index = customTasks.findIndex(t => t.id === taskId);
+        if(index > -1) customTasks.splice(index, 1);
+        localStorage.setItem(currentUser + '_customTasks', JSON.stringify(customTasks));
+        li.remove();
+        setTimeout(loadCheckboxStates, 10);
+        scheduleCloudSave();
     });
     if(isExisting){
         const dateKey = getCurrentDateKey();
